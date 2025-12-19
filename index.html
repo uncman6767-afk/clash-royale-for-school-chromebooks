@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Viking Royale Arena</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root{
+  --bg:#0e1430; --arena:#2b2f7a; --accent:#7b5cff;
+  --good:#2ecc71; --bad:#e74c3c;
+}
+body{margin:0;font-family:system-ui,Segoe UI,Arial;text-align:center;color:white;background:radial-gradient(1200px 600px at 50% -200px,#1b2350,#0e1430);}
+h2{margin:10px 0 6px}
+#hud{display:flex;justify-content:center;gap:12px;align-items:center;margin:5px;}
+#timer{opacity:.9;font-weight:bold}
+#elixirWrap{display:flex;gap:6px;align-items:center;padding:6px 10px;background:rgba(0,0,0,.35);border-radius:999px}
+.orb{width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff,#7b5cff 40%,#4a2fff);box-shadow:0 0 6px #7b5cff}
+.orb.off{opacity:.25;box-shadow:none}
+
+#arena{position:relative;width:min(760px,96vw);height:400px;margin:10px auto;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5), inset 0 0 0 3px #fff;background:linear-gradient(#3bb54a 0 45%, #4aa3ff 45% 55%, #3bb54a 55%), repeating-linear-gradient(90deg, rgba(255,255,255,.08) 0 6px, transparent 6px 16px);}
+.bridge{position:absolute;left:50%;transform:translateX(-50%);width:120px;height:28px;background:#caa46a;border-radius:6px;box-shadow:inset 0 -4px 0 rgba(0,0,0,.2);}
+#bridgeTop{top:45%} #bridgeBot{top:55%}
+
+.lane{position:absolute;width:100%;height:50%} #top{top:0} #bot{bottom:0}
+
+.tower{position:absolute;width:50px;height:130px;top:125px;border-radius:10px;background:linear-gradient(#fff,#ddd);box-shadow:0 8px 0 rgba(0,0,0,.25);}
+.princess{width:50px;height:130px;}
+.crown{position:absolute;top:-14px;left:50%;transform:translateX(-50%);width:28px;height:18px;background:gold;border-radius:4px}
+.hp{position:absolute;top:-10px;left:3px;width:50px;height:6px;background:#400;border-radius:999px}
+.hpi{height:100%;background:#0f0;border-radius:999px}
+
+.unit{position:absolute;width:28px;height:28px;transition:transform .1s;}
+.player svg,.enemy svg{width:28px;height:28px;}
+.pop{position:absolute;font-size:12px;font-weight:700;animation:pop .6s ease-out forwards;pointer-events:none}
+@keyframes pop{to{transform:translateY(-18px);opacity:0}}
+
+#hand{display:flex;justify-content:center;gap:8px;margin:10px auto;flex-wrap:wrap}
+.card{width:96px;height:64px;border-radius:10px;cursor:pointer;background:linear-gradient(#2a357a,#232b66);border:1px solid rgba(255,255,255,.25);box-shadow:0 8px 16px rgba(0,0,0,.35);display:flex;flex-direction:column;justify-content:center;align-items:center;user-select:none}
+.card.off{opacity:.4}
+.cost{margin-top:2px;font-size:12px;opacity:.85}
+#msg{min-height:18px;opacity:.9}
+</style>
+</head>
+<body>
+<h2>⚔️ Viking Royale Arena</h2>
+<div id="hud">
+  <div id="timer">02:30</div>
+  <div id="elixirWrap"></div>
+</div>
+<div id="msg"></div>
+<div id="arena">
+  <div id="top" class="lane"></div>
+  <div id="bot" class="lane"></div>
+  <div id="bridgeTop" class="bridge"></div>
+  <div id="bridgeBot" class="bridge"></div>
+
+  <!-- Player Towers -->
+  <div id="pt1" class="tower princess"><div class="crown"></div><div class="hp"><div id="pHP1" class="hpi"></div></div></div>
+  <div id="pt2" class="tower princess"><div class="crown"></div><div class="hp"><div id="pHP2" class="hpi"></div></div></div>
+  <div id="ptK" class="tower"><div class="crown"></div><div class="hp"><div id="pHPK" class="hpi"></div></div></div>
+
+  <!-- Enemy Towers -->
+  <div id="et1" class="tower princess"><div class="crown"></div><div class="hp"><div id="eHP1" class="hpi"></div></div></div>
+  <div id="et2" class="tower princess"><div class="crown"></div><div class="hp"><div id="eHP2" class="hpi"></div></div></div>
+  <div id="etK" class="tower"><div class="crown"></div><div class="hp"><div id="eHPK" class="hpi"></div></div></div>
+</div>
+<div id="hand"></div>
+
+<script>
+/* ==== DATA ==== */
+let elixir=10,time=150,overtime=false;
+let towers={p1:100,p2:100,pK:100,e1:100,e2:100,eK:100};
+const units={
+ warrior:{hp:40,dmg:6,speed:1.8,cost:3,type:'melee',svg:'<svg><circle cx="14" cy="14" r="12" fill="#f1c40f"/><rect x="10" y="10" width="8" height="14" fill="#2c3e50"/></svg>'},
+ scout:{hp:20,dmg:4,speed:3,cost:2,type:'melee',svg:'<svg><circle cx="14" cy="14" r="12" fill="#fff"/><polygon points="8,20 14,8 20,20" fill="#2980b9"/></svg>'},
+ guard:{hp:90,dmg:5,speed:1,cost:5,type:'melee',svg:'<svg><rect x="6" y="6" width="16" height="16" fill="#95a5a6"/><circle cx="14" cy="14" r="6" fill="#2c3e50"/></svg>'},
+ archer:{hp:25,dmg:5,speed:1.6,cost:3,type:'ranged',svg:'<svg><circle cx="14" cy="14" r="12" fill="#e74c3c"/><line x1="7" y1="21" x2="21" y2="7" stroke="#2c3e50" stroke-width="2"/></svg>'},
+ drake:{hp:50,dmg:6,speed:2.1,cost:4,type:'flying',svg:'<svg><circle cx="14" cy="14" r="12" fill="#9b59b6"/><polygon points="4,20 14,4 24,20" fill="#8e44ad"/></svg>'}
+};
+let deck=["warrior","archer","scout","guard","drake"];
+let hand=deck.slice(0,4), queue=deck.slice(4);
+const arena=document.getElementById('arena');
+
+/* ==== UI ==== */
+const elWrap=document.getElementById('elixirWrap');
+function drawElixir(){elWrap.innerHTML='';for(let i=0;i<10;i++){const o=document.createElement('div');o.className='orb'+(i<elixir?'':' off');elWrap.appendChild(o);}}
+function drawHand(){const h=document.getElementById('hand');h.innerHTML='';hand.forEach(c=>{const b=document.createElement('div');b.className='card'+(elixir<units[c].cost?' off':'');b.innerHTML=`<b>${c}</b><div class="cost">${units[c].cost}</div>`;b.onmousedown=e=>startDrag(e,c);h.appendChild(b);});}
+
+/* ==== DRAG DROP ==== */
+let dragging=null;
+function startDrag(e,card){
+ dragging={card,type:card};
+ dragging.el=document.createElement('div');
+ dragging.el.className='card';
+ dragging.el.style.position='absolute';
+ dragging.el.style.width='96px'; dragging.el.style.height='64px';
+ dragging.el.style.left=e.pageX-48+'px';
+ dragging.el.style.top=e.pageY-32+'px';
+ dragging.el.style.pointerEvents='none';
+ dragging.el.style.opacity='0.8';
+ document.body.appendChild(dragging.el);
+ document.onmousemove=dragMove;
+ document.onmouseup=dropCard;
+}
+function dragMove(e){
+ if(!dragging)return;
+ dragging.el.style.left=e.pageX-48+'px';
+ dragging.el.style.top=e.pageY-32+'px';
+}
+function dropCard(e){
+ if(!dragging)return;
+ const arenaRect=arena.getBoundingClientRect();
+ const lane=e.clientY-arenaRect.top<arenaRect.height/2?'top':'bot';
+ deploy(dragging.type,lane);
+ document.body.removeChild(dragging.el);
+ rotateHand(dragging.type);
+ dragging=null;
+ document.onmousemove=null;
+ document.onmouseup=null;
+}
+
+/* ==== GAMEPLAY ==== */
+function rotateHand(c){hand.splice(hand.indexOf(c),1);hand.push(queue.shift());queue.push(c);}
+function deploy(type,lane){if(elixir<units[type].cost)return; elixir-=units[type].cost;drawElixir();spawn(type,'player',80,lane);}
+function y(l){return l==='top'?110:250;}
+function spawn(type,team,x,lane){
+ const u=document.createElement('div');
+ u.className=`unit ${team}`;
+ u.innerHTML=units[type].svg;
+ u.style.left=x+'px'; u.style.top=y(lane)+'px';
+ u.dataset.hp=units[type].hp;
+ u.dataset.type=units[type].type;
+ arena.appendChild(u);
+
+ const move=setInterval(()=>{
+   let targets=Array.from(arena.getElementsByClassName(team==='player'?'enemy':'player')).filter(el=>{
+     const top=parseFloat(el.style.top);
+     return (lane==='top'?top<200:top>=200);
+   });
+   let target=targets.length>0?targets[0]:null;
+   if(target){
+     if(Math.abs(parseFloat(u.style.left)-parseFloat(target.style.left))<30){
+       target.dataset.hp-=units[type].dmg;
+       hitEffect(target,units[type].dmg);
+       if(target.dataset.hp<=0) target.remove();
+       return;
+     }
+   } else {
+     let pos=parseFloat(u.style.left);
+     pos+=team==='player'?units[type].speed:-units[type].speed;
+     u.style.left=pos+'px';
+     if(team==='player'&&pos>arena.clientWidth-90){hitTower('enemy',units[type].dmg,u);clearInterval(move);u.remove();}
+     if(team==='enemy'&&pos<70){hitTower('player',units[type].dmg,u);clearInterval(move);u.remove();}
+   }
+ },30);
+}
+function hitTower(side,dmg,u){
+ const pop=document.createElement('div');pop.className='pop';pop.textContent='-'+dmg;
+ pop.style.left=u.style.left; pop.style.top=u.style.top;
+ arena.appendChild(pop);setTimeout(()=>pop.remove(),600);
+ if(side==='enemy'){towers.eK-=dmg;} else {towers.pK-=dmg;}
+ updateBars();
+}
+function hitEffect(unit,dmg){
+ const pop=document.createElement('div');pop.className='pop';pop.textContent='-'+dmg;
+ pop.style.left=unit.style.left; pop.style.top=unit.style.top;
+ arena.appendChild(pop); setTimeout(()=>pop.remove(),500);
+}
+function updateBars(){document.getElementById('pHPK').style.width=towers.pK+'%';document.getElementById('eHPK').style.width=towers.eK+'%';}
+
+/* ==== TIMERS ==== */
+setInterval(()=>{
+ elixir+=overtime?2:1; elixir=Math.min(10,elixir);
+ drawElixir(); drawHand();
+},1000);
+setInterval(()=>{time--; if(time<=0){overtime=true;document.getElementById('msg').textContent='OVERTIME!'} 
+ const m=String(Math.floor(time/60)).padStart(2,'0'); const s=String(time%60).padStart(2,'0'); document.getElementById('timer').textContent=`${m}:${s}`;},1000);
+setInterval(()=>{const k=Object.keys(units); spawn(k[Math.floor(Math.random()*k.length)],'enemy',arena.clientWidth-90,Math.random()>.5?'top':'bot');},2200);
+
+function check(){if(towers.eK<=0){alert('VICTORY');location.reload()}if(towers.pK<=0){alert('DEFEAT');location.reload()}}
+drawElixir(); drawHand();
+</script>
+</body>
+</html>
